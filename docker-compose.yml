@@ -1,0 +1,6 @@
+version: '3.6'
+services:
+  ignite:
+    image: apacheignite/ignite:2.7.6
+    ports:
+      - "10800:10800"
