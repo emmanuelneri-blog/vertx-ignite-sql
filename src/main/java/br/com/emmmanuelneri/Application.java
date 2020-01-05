@@ -1,17 +1,20 @@
 package br.com.emmmanuelneri;
 
-import io.vertx.core.Handler;
+import br.com.emmmanuelneri.domain.Person;
+import br.com.emmmanuelneri.infra.DBMigration;
+import br.com.emmmanuelneri.infra.SQLConfiguration;
+import br.com.emmmanuelneri.repository.PersonRepository;
+import io.vertx.core.CompositeFuture;
+import io.vertx.core.Future;
+import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
-import io.vertx.core.json.JsonArray;
-import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
-import io.vertx.ext.jdbc.JDBCClient;
-import io.vertx.ext.sql.ResultSet;
 import io.vertx.ext.sql.SQLClient;
-import io.vertx.ext.sql.SQLConnection;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 public class Application {
 
@@ -19,70 +22,45 @@ public class Application {
 
     public static void main(final String[] args) {
         final Vertx vertx = Vertx.vertx();
+        final SQLClient client = SQLConfiguration.create().createSqlClient(vertx);
 
-        final JsonObject config = new JsonObject()
-                .put("url", "jdbc:ignite:thin://localhost:10800")
-                .put("max_pool_size", 30);
+        final Promise<Void> migrationPromise = Promise.promise();
+        final DBMigration migration = DBMigration.create();
+        migration.start(client, migrationPromise);
 
-        final SQLClient client = JDBCClient.createShared(vertx, config);
-
-        execute(client, "create table if not exists Person (" +
-                " id UUID, name VARCHAR," +
-                " PRIMARY KEY (id))" +
-                " WITH \"template=replicated\""
-        );
-
-        execute(client, "INSERT INTO Person (id, name) values (RANDOM_UUID(), 'Name 1');");
-        execute(client, "INSERT INTO Person (id, name) values (RANDOM_UUID(), 'Name 2');");
-        execute(client, "INSERT INTO Person (id, name) values (RANDOM_UUID(), 'Name 3');");
-        execute(client, "INSERT INTO Person (id, name) values (RANDOM_UUID(), 'Name 4');");
-        execute(client, "INSERT INTO Person (id, name) values (RANDOM_UUID(), 'Name 5');");
-
-        query(client, "SELECT * FROM Person", result -> result.forEach(person -> LOGGER.info("value: {0}", person)));
-    }
-
-    private static void execute(final SQLClient client, final String query) {
-        client.getConnection(connectionHandler -> {
-            if (connectionHandler.failed()) {
-                LOGGER.error("connection error", connectionHandler.cause());
+        migrationPromise.future().onComplete(asyncResult -> {
+            if (asyncResult.failed()) {
+                LOGGER.error("migration error", asyncResult.cause());
                 return;
             }
 
-            try (final SQLConnection sqlConnection = connectionHandler.result()) {
-                sqlConnection.execute(query, sqlHandler -> {
-                    if (sqlHandler.failed()) {
-                        LOGGER.error("query error", sqlHandler.cause());
-                        return;
-                    }
+            final PersonRepository personRepository = PersonRepository.create(client);
+            final List<Future> insertsPromises = inserts(personRepository, 5);
 
-                    LOGGER.info("executed");
-                });
-            } catch (final Exception ex) {
-                LOGGER.error("connectiom error", ex);
-            }
+            CompositeFuture.all(insertsPromises).setHandler(compositeFutureAsyncResult -> {
+                if (compositeFutureAsyncResult.failed()) {
+                    LOGGER.error("composite error", compositeFutureAsyncResult.cause());
+                    return;
+                }
+
+                personRepository.findAll(result -> {
+                    result.forEach(System.out::println);
+                }, error -> LOGGER.error("execute error", error));
+            });
         });
     }
 
-    private static void query(final SQLClient client, final String query, final Handler<List<JsonArray>> resultList) {
-        client.getConnection(connectionHandler -> {
-            if (connectionHandler.failed()) {
-                LOGGER.error("connection error", connectionHandler.cause());
-                return;
-            }
+    private static List<Future> inserts(final PersonRepository personRepository, final int quantity) {
+        final List<Future> promises = new ArrayList<>();
 
-            try (final SQLConnection sqlConnection = connectionHandler.result()) {
-                sqlConnection.query(query, queryHandler -> {
-                    if (queryHandler.failed()) {
-                        LOGGER.error("query error", queryHandler.cause());
-                        return;
-                    }
+        for (int i = 0; i < quantity; i++) {
+            final Promise<Void> promise = Promise.promise();
 
-                    final ResultSet resultSet = queryHandler.result();
-                    resultList.handle(resultSet.getResults());
-                });
-            } catch (final Exception ex) {
-                LOGGER.error("connectiom error", ex);
-            }
-        });
+            final String personName = String.format("Name %d", new Random().nextInt());
+            personRepository.create(new Person(personName), result -> promise.complete(), promise::fail);
+            promises.add(promise.future());
+        }
+
+        return promises;
     }
 }
