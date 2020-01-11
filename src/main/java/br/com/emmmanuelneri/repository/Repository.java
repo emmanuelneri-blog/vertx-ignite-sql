@@ -1,7 +1,10 @@
 package br.com.emmmanuelneri.repository;
 
 import br.com.emmmanuelneri.domain.Person;
+import io.vertx.core.CompositeFuture;
+import io.vertx.core.Future;
 import io.vertx.core.Handler;
+import io.vertx.core.Promise;
 import io.vertx.core.json.JsonArray;
 import io.vertx.ext.sql.ResultSet;
 import io.vertx.ext.sql.SQLClient;
@@ -10,6 +13,7 @@ import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @AllArgsConstructor(access = AccessLevel.PROTECTED)
 public abstract class Repository<T> {
@@ -26,17 +30,76 @@ public abstract class Repository<T> {
             }
 
             try (final SQLConnection sqlConnection = connectionHandler.result()) {
-                sqlConnection.execute(query, updateHandler -> {
-                    if (updateHandler.failed()) {
-                        errorHandler.handle(updateHandler.cause());
+                final Promise<Void> promise = Promise.promise();
+
+                execute(query, sqlConnection, promise);
+                promise.future().setHandler(asyncResult -> {
+                    if (asyncResult.failed()) {
+                        errorHandler.handle(asyncResult.cause());
                         return;
                     }
 
-                    resultHandler.handle(updateHandler.result());
+                    resultHandler.handle(asyncResult.result());
                 });
             } catch (final Exception ex) {
                 errorHandler.handle(ex);
             }
+        });
+    }
+
+    private void execute(final String query, final SQLConnection sqlConnection, final Promise<Void> promise) {
+        sqlConnection.execute(query, executeHandler -> {
+            if (executeHandler.failed()) {
+                promise.fail(executeHandler.cause());
+                return;
+            }
+
+            promise.complete(executeHandler.result());
+        });
+    }
+
+    protected void executeInTransaction(final List<String> queries,
+                                        final Handler<Void> resultHandler,
+                                        final Handler<Throwable> errorHandler) {
+        client.getConnection(connectionHandler -> {
+            if (connectionHandler.failed()) {
+                errorHandler.handle(connectionHandler.cause());
+                return;
+            }
+
+            final SQLConnection sqlConnection = connectionHandler.result();
+            sqlConnection.setAutoCommit(false, autoCommitResult -> {
+                if (autoCommitResult.failed()) {
+                    errorHandler.handle(autoCommitResult.cause());
+                    return;
+                }
+
+                final List<Future> promises = queries.stream()
+                        .map(query -> {
+                            final Promise<Void> promise = Promise.promise();
+                            execute(query, sqlConnection, promise);
+                            return promise.future();
+                        }).collect(Collectors.toList());
+
+                CompositeFuture.all(promises).setHandler(compositeFutureAsyncResult -> {
+                    if (compositeFutureAsyncResult.failed()) {
+                        sqlConnection.rollback(asyncResult -> {
+                        });
+                        errorHandler.handle(compositeFutureAsyncResult.cause());
+                        return;
+                    }
+
+                    sqlConnection.commit(commitResult -> {
+                        if (commitResult.failed()) {
+                            errorHandler.handle(commitResult.cause());
+                            return;
+                        }
+
+                        resultHandler.handle(commitResult.result());
+                        sqlConnection.close();
+                    });
+                });
+            });
         });
     }
 

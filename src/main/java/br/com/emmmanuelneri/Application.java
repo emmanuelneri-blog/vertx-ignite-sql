@@ -1,5 +1,6 @@
 package br.com.emmmanuelneri;
 
+import br.com.emmmanuelneri.domain.Address;
 import br.com.emmmanuelneri.domain.Person;
 import br.com.emmmanuelneri.infra.DBMigration;
 import br.com.emmmanuelneri.infra.SQLConfiguration;
@@ -35,7 +36,7 @@ public class Application {
             }
 
             final PersonRepository personRepository = PersonRepository.create(client);
-            final List<Future> insertsPromises = inserts(personRepository, 5);
+            final List<Future> insertsPromises = inserts(personRepository, 10);
 
             CompositeFuture.all(insertsPromises).setHandler(compositeFutureAsyncResult -> {
                 if (compositeFutureAsyncResult.failed()) {
@@ -56,8 +57,9 @@ public class Application {
         for (int i = 0; i < quantity; i++) {
             final Promise<Void> promise = Promise.promise();
 
+            final Address address = new Address("street", new Random().nextInt());
             final String personName = String.format("Name %d", new Random().nextInt());
-            personRepository.create(new Person(personName), result -> promise.complete(), promise::fail);
+            personRepository.create(new Person(personName, address), result -> promise.complete(), promise::fail);
             promises.add(promise.future());
         }
 

@@ -11,14 +11,14 @@ import java.util.UUID;
 @Setter
 @ToString
 @NoArgsConstructor
-public class Person {
+public class Address {
 
     private UUID id;
-    private String name;
-    private Address address;
+    private String street;
+    private int number;
 
-    public Person(final String name, final Address address) {
-        this.name = name;
-        this.address = address;
+    public Address(final String street, final int number) {
+        this.street = street;
+        this.number = number;
     }
 }
