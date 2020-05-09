@@ -16,6 +16,7 @@
 
         <vertx.version>3.8.4</vertx.version>
         <ignite.version>2.7.6</ignite.version>
+        <hikari.version>2.4.4</hikari.version>
         <lombok.version>1.18.10</lombok.version>
     </properties>
 
@@ -35,6 +36,12 @@
         <dependency>
             <groupId>io.vertx</groupId>
             <artifactId>vertx-jdbc-client</artifactId>
+            <exclusions>
+                <exclusion>
+                    <artifactId>c3p0</artifactId>
+                    <groupId>com.mchange</groupId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>
@@ -46,6 +53,12 @@
             <groupId>org.apache.ignite</groupId>
             <artifactId>ignite-indexing</artifactId>
             <version>${ignite.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.zaxxer</groupId>
+            <artifactId>HikariCP</artifactId>
+            <version>${hikari.version}</version>
         </dependency>
 
         <dependency>

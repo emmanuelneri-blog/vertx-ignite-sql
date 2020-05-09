@@ -9,16 +9,17 @@ import io.vertx.core.json.JsonArray;
 import io.vertx.ext.sql.ResultSet;
 import io.vertx.ext.sql.SQLClient;
 import io.vertx.ext.sql.SQLConnection;
-import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
-@AllArgsConstructor(access = AccessLevel.PROTECTED)
 public abstract class Repository<T> {
 
     private final SQLClient client;
+
+    protected Repository(SQLClient client) {
+        this.client = client;
+    }
 
     protected void execute(final String query,
                            final Handler<Void> resultHandler,
