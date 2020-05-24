@@ -8,4 +8,5 @@ Exemplo da utilização do [Apache Ignite](https://ignite.apache.org/) com SQL e
 - Execute a classe `Application.java` para inicializar a aplicação
 
 ### Referência
-[Ignite SQL API](https://apacheignite-sql.readme.io/docs/overview)
+- [Ignite SQL API](https://apacheignite-sql.readme.io/docs/overview)
+- [Vert.x JDBC](https://vertx.io/docs/vertx-jdbc-client/java/)
